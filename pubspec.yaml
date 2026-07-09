@@ -10,8 +10,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_web_plugins:
-    sdk: flutter
   plugin_platform_interface: ^2.0.2
 
 dev_dependencies:
@@ -34,6 +32,9 @@ flutter:
   # This is required for using `dart:ffi`.
   # All these are used by the tooling to maintain consistency when
   # adding or updating assets for this project.
+  # Vendored fork for Relocat: android/ios only. Desktop and web platform
+  # stubs were removed during the security audit (see AUDIT.md) to shrink the
+  # attack surface. Do not re-add them without re-auditing.
   plugin:
     platforms:
       android:
@@ -41,15 +42,6 @@ flutter:
         pluginClass: FlutterDocScannerPlugin
       ios:
         pluginClass: SwiftFlutterDocScannerPlugin
-      linux:
-        pluginClass: FlutterDocScannerPlugin
-      macos:
-        pluginClass: FlutterDocScannerPlugin
-      windows:
-        pluginClass: FlutterDocScannerPluginCApi
-      web:
-        pluginClass: FlutterDocScannerWeb
-        fileName: flutter_doc_scanner_web.dart
 
   # To add assets to your plugin package, add an assets section, like this:
   # assets:

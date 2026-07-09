@@ -69,5 +69,8 @@ android {
     }
 }
 dependencies {
+    // Pinned to an explicit version (no dynamic '+' range) per the Relocat
+    // vendoring audit (see AUDIT.md). Bump only via reviewed diff. The scanner
+    // module itself is fetched at runtime by Google Play services, not here.
     implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0'
 }
