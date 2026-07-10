@@ -16,7 +16,9 @@ class FlutterDocScanner {
   ///
   /// [page] is the maximum number of pages to scan (must be >= 1, defaults to 4).
   /// Returns `null` if the user cancelled the scan.
-  /// Throws [DocScanException] on failure.
+  /// Throws [DocScanException] on failure. On iOS, throws with code
+  /// [DocScanException.codePermissionDenied] (`PERMISSION_DENIED`) if camera
+  /// access has been denied or restricted, before any camera UI is shown.
   Future<dynamic> getScanDocuments({int page = 4}) {
     _validatePage(page);
     return FlutterDocScannerPlatform.instance.getScanDocuments(page);
@@ -34,7 +36,9 @@ class FlutterDocScanner {
   /// If [useAutomaticSinglePictureProcessing] is true, native code uses
   /// a fast single-picture flow and ignores [page].
   /// Returns `null` if the user cancelled the scan.
-  /// Throws [DocScanException] on failure.
+  /// Throws [DocScanException] on failure. On iOS, throws with code
+  /// [DocScanException.codePermissionDenied] (`PERMISSION_DENIED`) if camera
+  /// access has been denied or restricted, before any camera UI is shown.
   Future<ImageScanResult?> getScannedDocumentAsImages({
     int page = 4,
     ImageFormat imageFormat = ImageFormat.jpeg,
@@ -65,7 +69,9 @@ class FlutterDocScanner {
   ///
   /// [page] is the maximum number of pages to scan (must be >= 1, defaults to 4).
   /// Returns `null` if the user cancelled the scan.
-  /// Throws [DocScanException] on failure.
+  /// Throws [DocScanException] on failure. On iOS, throws with code
+  /// [DocScanException.codePermissionDenied] (`PERMISSION_DENIED`) if camera
+  /// access has been denied or restricted, before any camera UI is shown.
   Future<PdfScanResult?> getScannedDocumentAsPdf({int page = 4}) async {
     _validatePage(page);
     final data = await FlutterDocScannerPlatform.instance
@@ -92,6 +98,29 @@ class FlutterDocScanner {
     );
     if (data == null) return null;
     return ImageScanResult.fromPlatformData(data);
+  }
+
+  /// Copies a scanned page from a platform [uri] to [destPath] on disk. **Android only.**
+  ///
+  /// On Android, [getScannedDocumentAsImages]/[getScanDocumentsUri] return ML Kit
+  /// `content://` URIs that Dart cannot read directly. This performs a native
+  /// stream copy from [uri] into [destPath], a caller-owned absolute path. The
+  /// caller owns and is responsible for [destPath] (location, cleanup, and
+  /// deleting the plaintext copy after encryption).
+  ///
+  /// Returns `true` on success. Throws [DocScanException] with code
+  /// [DocScanException.codeCopyFailed] (`COPY_FAILED`) on any failure (null input
+  /// stream, IO error, or a lapsed URI permission grant); the error message is
+  /// static and never contains the URI or path. On iOS this method is not
+  /// implemented and throws [DocScanException] with a `notImplemented` code.
+  Future<bool> copyPageToFile({
+    required String uri,
+    required String destPath,
+  }) {
+    return FlutterDocScannerPlatform.instance.copyPageToFile(
+      uri: uri,
+      destPath: destPath,
+    );
   }
 
   void _validatePage(int page) {

@@ -33,6 +33,19 @@ class DocScanException implements Exception {
   /// The platform does not support this feature.
   static const codeUnsupported = 'UNSUPPORTED_PLATFORM';
 
+  /// Camera access was denied or restricted (iOS pre-flight check).
+  ///
+  /// Raised by the scan methods before the camera controller is presented when
+  /// `AVCaptureDevice.authorizationStatus(for: .video)` is `.denied` or
+  /// `.restricted`. The app should surface a rationale and deep-link to Settings.
+  static const codePermissionDenied = 'PERMISSION_DENIED';
+
+  /// Copying a scanned page out of a content URI failed (Android only).
+  ///
+  /// Raised by `copyPageToFile` on a null input stream, IO error, or lapsed URI
+  /// permission grant. The message is static and never contains the URI or path.
+  static const codeCopyFailed = 'COPY_FAILED';
+
   @override
   String toString() => 'DocScanException($code): $message';
 }

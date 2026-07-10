@@ -1,3 +1,4 @@
+import AVFoundation
 import Flutter
 import UIKit
 import Vision
@@ -16,7 +17,36 @@ public class SwiftFlutterDocScannerPlugin: NSObject, FlutterPlugin, VNDocumentCa
        registrar.addMethodCallDelegate(instance, channel: channel)
    }
 
+   /// Method names that present a camera-backed scanner. Each requires camera
+   /// access, so they are gated by `cameraAuthorizationDenied()` below.
+   private static let scanMethods: Set<String> = [
+       "getScanDocuments",
+       "getScannedDocumentAsImages",
+       "getScannedDocumentAsPdf",
+   ]
+
+   /// Returns `true` when camera access has been explicitly denied or restricted
+   /// (parental controls / MDM). `.authorized` and `.notDetermined` return
+   /// `false` so the scanner still presents and the system prompt (on
+   /// `.notDetermined`) or VisionKit handles the flow as before. The message is
+   /// static and carries no details.
+   private func cameraAuthorizationDenied() -> Bool {
+       switch AVCaptureDevice.authorizationStatus(for: .video) {
+       case .denied, .restricted:
+           return true
+       case .authorized, .notDetermined:
+           return false
+       @unknown default:
+           return false
+       }
+   }
+
    public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+       if SwiftFlutterDocScannerPlugin.scanMethods.contains(call.method),
+          cameraAuthorizationDenied() {
+           result(FlutterError(code: "PERMISSION_DENIED", message: "Camera permission denied", details: nil))
+           return
+       }
        if call.method == "getScanDocuments" {
            let presentedVC: UIViewController? = UIApplication.shared.keyWindow?.rootViewController
            self.resultChannel = result

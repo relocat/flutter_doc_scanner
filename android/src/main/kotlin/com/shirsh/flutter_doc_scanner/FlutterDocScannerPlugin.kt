@@ -2,8 +2,10 @@ package com.shirsh.flutter_doc_scanner
 
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
+import android.net.Uri
 import android.util.Log
 import androidx.core.app.ActivityCompat.startIntentSenderForResult
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
@@ -17,6 +19,8 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.PluginRegistry.ActivityResultListener
+import java.io.File
+import java.io.IOException
 
 class FlutterDocScannerPlugin : MethodCallHandler, ActivityResultListener,
     FlutterPlugin, ActivityAware {
@@ -24,6 +28,7 @@ class FlutterDocScannerPlugin : MethodCallHandler, ActivityResultListener,
     private var activityBinding: ActivityPluginBinding? = null
     private val CHANNEL = "flutter_doc_scanner"
     private var activity: Activity? = null
+    private var applicationContext: Context? = null
     private var pendingResult: MethodChannel.Result? = null
 
     private val REQUEST_CODE_SCAN = 213312
@@ -32,6 +37,11 @@ class FlutterDocScannerPlugin : MethodCallHandler, ActivityResultListener,
     private val REQUEST_CODE_SCAN_PDF = 216612
     private val DEFAULT_PAGE_LIMIT = 4
     private val TAG = FlutterDocScannerPlugin::class.java.simpleName
+
+    // Static (no path/URI echo) failure surface for copyPageToFile. The caller
+    // owns destPath, so we never validate or reveal it in error output.
+    private val ERROR_COPY_FAILED = "COPY_FAILED"
+    private val ERROR_COPY_FAILED_MESSAGE = "Failed to copy scanned page."
 
 
     override fun onMethodCall(call: MethodCall, result: Result) {
@@ -64,6 +74,7 @@ class FlutterDocScannerPlugin : MethodCallHandler, ActivityResultListener,
                 REQUEST_CODE_SCAN_URI,
                 intArrayOf(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
             )
+            "copyPageToFile" -> copyPageToFile(call, result)
             else -> result.notImplemented()
         }
     }
@@ -229,7 +240,50 @@ class FlutterDocScannerPlugin : MethodCallHandler, ActivityResultListener,
         pendingResult = null
     }
 
+    /**
+     * Copies a scanned page from a content URI (produced by ML Kit's Play-services
+     * FileProvider) to an on-disk file the caller controls.
+     *
+     * Args: `uri` (String, the content:// URI) and `destPath` (String, absolute
+     * destination path chosen and owned by the caller). Replies `true` on success.
+     *
+     * The caller owns `destPath`; no path manipulation or validation is performed
+     * here beyond opening the streams. On any failure — missing args, null input
+     * stream, IO error, or SecurityException (e.g. a URI permission grant that has
+     * lapsed) — this fails closed with a static [ERROR_COPY_FAILED] code and a
+     * static message. The URI and destination path are never echoed into the error
+     * or into logs.
+     */
+    private fun copyPageToFile(call: MethodCall, result: Result) {
+        val uri = call.argument<String>("uri")
+        val destPath = call.argument<String>("destPath")
+        val context = applicationContext
+        if (uri == null || destPath == null || context == null) {
+            result.error(ERROR_COPY_FAILED, ERROR_COPY_FAILED_MESSAGE, null)
+            return
+        }
+
+        try {
+            val inputStream = context.contentResolver.openInputStream(Uri.parse(uri))
+            if (inputStream == null) {
+                result.error(ERROR_COPY_FAILED, ERROR_COPY_FAILED_MESSAGE, null)
+                return
+            }
+            inputStream.use { input ->
+                File(destPath).outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            result.success(true)
+        } catch (e: IOException) {
+            result.error(ERROR_COPY_FAILED, ERROR_COPY_FAILED_MESSAGE, null)
+        } catch (e: SecurityException) {
+            result.error(ERROR_COPY_FAILED, ERROR_COPY_FAILED_MESSAGE, null)
+        }
+    }
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        applicationContext = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
         channel?.setMethodCallHandler(this)
     }
@@ -237,6 +291,7 @@ class FlutterDocScannerPlugin : MethodCallHandler, ActivityResultListener,
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel?.setMethodCallHandler(null)
         channel = null
+        applicationContext = null
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {

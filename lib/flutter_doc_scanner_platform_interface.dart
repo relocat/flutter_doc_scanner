@@ -67,4 +67,13 @@ abstract class FlutterDocScannerPlatform extends PlatformInterface {
   Future<dynamic> getScanDocumentsUri(int page) {
     throw UnimplementedError('getScanDocumentsUri() has not been implemented.');
   }
+
+  /// Copies a scanned page from a platform [uri] to [destPath] on disk.
+  ///
+  /// Android only: [uri] is a `content://` URI produced by ML Kit's
+  /// Play-services FileProvider; [destPath] is a caller-owned absolute path.
+  /// Returns `true` on success.
+  Future<bool> copyPageToFile({required String uri, required String destPath}) {
+    throw UnimplementedError('copyPageToFile() has not been implemented.');
+  }
 }

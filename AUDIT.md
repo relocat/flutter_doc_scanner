@@ -229,3 +229,99 @@ it is inert dead code.
   iOS. Not a security issue; flagged for app-side expectations.
 - Network / telemetry / sandbox / pinning checks all pass; desktop and web stubs removed; the plugin
   still declares only android + ios and requires no web-only dependency.
+
+---
+
+## Amendment 1 — copy-out method + iOS camera-permission preflight
+
+**Date:** 2026-07-10
+**Applies on top of:** the hardening commit audited above (`16208d0`).
+
+### What was added and why
+
+Two narrow API additions were needed to integrate the plugin into the Relocat app without
+weakening the zero-knowledge boundary:
+
+1. **Android `copyPageToFile` (Kotlin).** `getScannedDocumentAsImages` returns ML Kit `content://`
+   URIs backed by a Play-services FileProvider (see §2 Android). Dart cannot read those URIs, and the
+   consuming app must not take on a generic content-resolver dependency. A new MethodChannel method
+   `copyPageToFile` performs a single native stream copy —
+   `contentResolver.openInputStream(Uri.parse(uri))` → `File(destPath)`, both wrapped in `use {}`
+   blocks — and replies `true` on success. The caller owns `destPath`; the plugin does no path
+   manipulation or validation beyond opening the streams.
+2. **iOS camera-permission preflight (Swift).** Before presenting the camera-backed scanner, the
+   three scan entry methods (`getScanDocuments`, `getScannedDocumentAsImages`,
+   `getScannedDocumentAsPdf`) now check `AVCaptureDevice.authorizationStatus(for: .video)`. `.denied`
+   and `.restricted` reply with a dedicated `PERMISSION_DENIED` error and do **not** present the
+   controller; `.authorized` and `.notDetermined` proceed exactly as before (VisionKit / the system
+   prompt handles `.notDetermined`). This gives the app a distinct denied signal for its
+   "rationale dialog → Settings deep link" UX, instead of a generic scan failure.
+
+### Evidence: no network I/O or telemetry introduced
+
+- **Android:** the only new imports are `android.content.Context`, `android.net.Uri`, `java.io.File`,
+  `java.io.IOException` (plus use of the existing `ContentResolver`). No sockets, no HTTP client, no
+  URL/`download`/analytics APIs. The copy is local: content URI → local file, in-process.
+- **iOS:** the only new import is `AVFoundation`, used solely for
+  `AVCaptureDevice.authorizationStatus(for:)` (a local, synchronous permission-status read — no
+  capture session, no networking). No new frameworks beyond that; no analytics/telemetry SDK.
+- **Dart:** new code uses only the existing `MethodChannel` plumbing and the existing
+  `DocScanException` mapping; no `dart:io`/`dart:html`, no `package:http`/`dio`, no telemetry.
+- The §1.1 (no network) and §1.2 (no telemetry) verdicts therefore still hold after this amendment.
+  No new runtime dependencies were added (`pubspec.yaml`, `android/build.gradle`, iOS
+  `Package.swift`/podspec unchanged); the ML Kit artifact pin (§1.4) is unchanged.
+
+### Exact new API signatures
+
+Public Dart (`lib/flutter_doc_scanner.dart`) and platform interface
+(`lib/flutter_doc_scanner_platform_interface.dart`):
+
+```dart
+Future<bool> copyPageToFile({required String uri, required String destPath});
+```
+
+Android native (`FlutterDocScannerPlugin.kt`) — MethodChannel method:
+
+```
+method: "copyPageToFile"
+args:   { "uri": String, "destPath": String }
+reply:  true on success | error(code = "COPY_FAILED", <static message>, null) on failure
+```
+
+iOS native (`SwiftFlutterDocScannerPlugin.swift`) — preflight applied to the existing scan methods:
+
+```
+if AVCaptureDevice.authorizationStatus(for: .video) is .denied | .restricted
+    -> FlutterError(code: "PERMISSION_DENIED", <static message>, details: nil)  // controller NOT presented
+```
+
+New `DocScanException` codes (`lib/flutter_doc_scanner_exception.dart`): `codePermissionDenied =
+'PERMISSION_DENIED'`, `codeCopyFailed = 'COPY_FAILED'`.
+
+### Error messages are static (no path/URI echo)
+
+- `COPY_FAILED` always replies with a fixed constant message (`ERROR_COPY_FAILED_MESSAGE =
+  "Failed to copy scanned page."`) and `null` details on every failure branch (missing args, null
+  context, null input stream, `IOException`, `SecurityException`). The `uri` and `destPath` are never
+  interpolated into the error and are never logged (no `Log.*` call was added to `copyPageToFile`).
+  The caught exceptions are intentionally not unwrapped into the reply, to avoid leaking filesystem
+  or content-provider detail.
+- `PERMISSION_DENIED` replies with a fixed static message and `details: nil` — no device, path, or
+  status detail.
+
+### Files changed in this amendment
+
+- `android/src/main/kotlin/com/shirsh/flutter_doc_scanner/FlutterDocScannerPlugin.kt`
+- `ios/flutter_doc_scanner/Sources/flutter_doc_scanner/SwiftFlutterDocScannerPlugin.swift`
+- `lib/flutter_doc_scanner.dart`, `lib/flutter_doc_scanner_method_channel.dart`,
+  `lib/flutter_doc_scanner_platform_interface.dart`, `lib/flutter_doc_scanner_exception.dart`
+- `test/flutter_doc_scanner_test.dart`, `test/flutter_doc_scanner_method_channel_test.dart`
+- `AUDIT.md` (this section)
+
+### Verification performed
+
+- `dart analyze lib test` → **No issues found.** `flutter test` → **6/6 passing** (adds
+  `copyPageToFile` delegation + method-channel success/`COPY_FAILED`-mapping tests).
+- Kotlin and Swift were syntax-reviewed line-by-line only — **no Android/iOS toolchain is available
+  in this environment**, so they were not compiled. This is a residual to close on a machine with the
+  native SDKs.

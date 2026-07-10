@@ -88,4 +88,24 @@ class MethodChannelFlutterDocScanner extends FlutterDocScannerPlatform {
       );
     }
   }
+
+  @override
+  Future<bool> copyPageToFile({
+    required String uri,
+    required String destPath,
+  }) async {
+    try {
+      final copied = await methodChannel.invokeMethod<bool>('copyPageToFile', {
+        'uri': uri,
+        'destPath': destPath,
+      });
+      return copied ?? false;
+    } on PlatformException catch (e) {
+      throw DocScanException(
+        code: e.code,
+        message: e.message ?? 'Failed to copy scanned page',
+        details: e.details,
+      );
+    }
+  }
 }

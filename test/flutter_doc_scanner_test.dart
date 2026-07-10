@@ -26,6 +26,12 @@ class MockFlutterDocScannerPlatform
 
   @override
   Future<dynamic> getScanDocumentsUri(int page) => Future.value();
+
+  @override
+  Future<bool> copyPageToFile({
+    required String uri,
+    required String destPath,
+  }) => Future.value(true);
 }
 
 void main() {
@@ -43,5 +49,21 @@ void main() {
     FlutterDocScannerPlatform.instance = fakePlatform;
 
     expect(await flutterDocScannerPlugin.getPlatformVersion(), '42');
+  });
+
+  test('copyPageToFile delegates to the platform and returns its result',
+      () async {
+    FlutterDocScanner flutterDocScannerPlugin = FlutterDocScanner();
+    MockFlutterDocScannerPlatform fakePlatform =
+        MockFlutterDocScannerPlatform();
+    FlutterDocScannerPlatform.instance = fakePlatform;
+
+    expect(
+      await flutterDocScannerPlugin.copyPageToFile(
+        uri: 'content://example/page-0',
+        destPath: '/tmp/page-0.jpg',
+      ),
+      isTrue,
+    );
   });
 }
