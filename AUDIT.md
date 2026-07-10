@@ -325,3 +325,88 @@ New `DocScanException` codes (`lib/flutter_doc_scanner_exception.dart`): `codePe
 - Kotlin and Swift were syntax-reviewed line-by-line only — **no Android/iOS toolchain is available
   in this environment**, so they were not compiled. This is a residual to close on a machine with the
   native SDKs.
+
+---
+
+## Amendment 2 — static-audit hardening of the iOS plugin (no path leak, no missing-reply hang, single-scan guard, no bogus path)
+
+**Date:** 2026-07-10
+**Applies on top of:** Amendment 1 (`b1f153f`).
+**Scope:** `ios/flutter_doc_scanner/Sources/flutter_doc_scanner/SwiftFlutterDocScannerPlugin.swift` only.
+No Dart, Kotlin, Android, or `AutoScanViewController.swift` change; no dependency or API-signature
+change. The §1.1 (no network) and §1.2 (no telemetry) verdicts are unaffected.
+
+A follow-up static audit of the iOS Swift plugin found four issues in how method-channel results are
+produced and cleared. All four are fixed here with minimal, mechanical edits.
+
+### I1 — stop leaking `error.localizedDescription` across the method channel
+
+Every `FlutterError(...)` reply that carried `details: error.localizedDescription` echoed the
+underlying error's message — which on file I/O errors includes the on-device **filesystem path** of
+the page/PDF being written — back across the channel to Dart. That is plaintext-adjacent detail the
+zero-knowledge consumer must never receive.
+
+**Fix:** all four sites now pass `details: nil` (matching the Amendment 1 `PERMISSION_DENIED` and
+`COPY_FAILED` convention and the app's own channels). The `code:` and `message:` are unchanged, so the
+consumer's code-based mapping is preserved.
+Sites: `SCAN_SAVE_ERROR` (single-picture catch), `SCAN_ERROR` (`onError`), `PDF_CREATION_ERROR`
+(`saveScannedPdf` catch), `SCAN_ERROR` (`documentCameraViewController(_:didFailWithError:)`).
+
+### I2 — missing-reply hang when the presenting view controller cannot be resolved
+
+Each scan entry (`getScanDocuments`, `getScannedDocumentAsImages`, `getScannedDocumentAsPdf`) resolved
+the presenter via `UIApplication.shared.keyWindow?.rootViewController` and then called
+`presentedVC?.present(...)`. When that optional was `nil`, the optional-chained `present` was a
+**silent no-op**: the stored `FlutterResult` was never invoked, so the Dart `await` hung forever.
+
+**Fix:** immediately after resolving `presentedVC`, if it is `nil` the method now replies
+`FlutterError(code: "NO_PRESENTER", message: "no view controller to present the scanner",
+details: nil)` on the fresh `result` and returns, before any state is stored — so nothing is presented
+and nothing is left pending. The VC-resolution itself (`keyWindow`) is unchanged; only the nil case is
+guarded. Applied at all three presentation sites.
+
+### M1 — single-slot `resultChannel` was never cleared and could be clobbered
+
+`resultChannel` (the single stored `FlutterResult?`) was set before presenting and read in the
+delegate/callback replies, but **never reset to `nil` afterward**, and a second scan invocation
+overwrote a still-pending one — orphaning the first Dart `await`.
+
+**Fix (two parts):**
+- **(a) In-progress guard.** At the top of `handle`, for the scan methods only
+  (`scanMethods.contains(call.method)`), if `resultChannel != nil` the new call is rejected with
+  `FlutterError(code: "SCAN_IN_PROGRESS", message: "a scan is already in progress", details: nil)`
+  and returns — the in-flight result is **not** clobbered. (This guard replies on the fresh `result`
+  and deliberately does not clear the stored slot.)
+- **(b) Clear on every reply.** Immediately after every site that invokes the stored `resultChannel`
+  (success and error, in the single-picture callbacks, `saveScannedImages`, `saveScannedPdf`,
+  `documentCameraViewControllerDidCancel`, and `documentCameraViewController(_:didFailWithError:)`),
+  `resultChannel` is set to `nil`. The `PERMISSION_DENIED` / `SCAN_IN_PROGRESS` / `NO_PRESENTER`
+  guards reply on the fresh `result` and never store, so the slot is never left stale on any path.
+
+### M2 — silent write failure returned a path to a non-existent file
+
+`saveScannedImages` used `try? page.pngData()?.write(to: url)` and then appended `url.path` to the
+returned array **unconditionally** — so a failed (or nil-data) write still returned a path to a file
+that does not exist, which the consumer would then try to evacuate.
+
+**Fix:** the page is only added on a confirmed successful write. `page.pngData()` is unwrapped with a
+`guard`, and the write is wrapped in `do { try data.write(to: url); filenames.append(url.path) }
+catch { … }`. On either failure the whole scan fails closed: it replies
+`FlutterError(code: "SCAN_SAVE_ERROR", message: "failed to write a scanned page", details: nil)`,
+clears `resultChannel`, and returns — never a partial or bogus path list. The write **location** is
+unchanged (`getDocumentsDirectory()` is untouched, per scope).
+
+### Not changed (explicitly out of scope)
+
+`getDocumentsDirectory()` / the write location, the Amendment 1 camera preflight, `copyPageToFile`,
+the Android/Kotlin code, and `AutoScanViewController.swift` were not touched. No refactor, rename, or
+restyle was performed — only the four fixes above.
+
+### Verification performed
+
+- Static review + grep only. After the change, `grep` confirms **zero** `localizedDescription` in the
+  active Swift (the sole remaining reference is `NSLocalizedDescriptionKey`, an error-construction key
+  in `saveSingleImage`, not a channel leak), all `details:` arguments are `nil`, and every stored
+  `resultChannel?(...)` reply is followed by `resultChannel = nil`.
+- **No Android/iOS toolchain is available in this environment**, so the Swift was **not compiled**. A
+  device compile + run is still required to close this out, as with Amendment 1.

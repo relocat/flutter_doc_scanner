@@ -47,8 +47,17 @@ public class SwiftFlutterDocScannerPlugin: NSObject, FlutterPlugin, VNDocumentCa
            result(FlutterError(code: "PERMISSION_DENIED", message: "Camera permission denied", details: nil))
            return
        }
+       if SwiftFlutterDocScannerPlugin.scanMethods.contains(call.method),
+          resultChannel != nil {
+           result(FlutterError(code: "SCAN_IN_PROGRESS", message: "a scan is already in progress", details: nil))
+           return
+       }
        if call.method == "getScanDocuments" {
            let presentedVC: UIViewController? = UIApplication.shared.keyWindow?.rootViewController
+           if presentedVC == nil {
+               result(FlutterError(code: "NO_PRESENTER", message: "no view controller to present the scanner", details: nil))
+               return
+           }
            self.resultChannel = result
            self.currentMethod = call.method
            self.presentingController = VNDocumentCameraViewController()
@@ -56,6 +65,10 @@ public class SwiftFlutterDocScannerPlugin: NSObject, FlutterPlugin, VNDocumentCa
            presentedVC?.present(self.presentingController!, animated: true)
        } else if call.method == "getScannedDocumentAsImages" {
            let presentedVC: UIViewController? = UIApplication.shared.keyWindow?.rootViewController
+           if presentedVC == nil {
+               result(FlutterError(code: "NO_PRESENTER", message: "no view controller to present the scanner", details: nil))
+               return
+           }
            self.resultChannel = result
            self.currentMethod = call.method
            let arguments = call.arguments as? [String: Any]
@@ -73,19 +86,23 @@ public class SwiftFlutterDocScannerPlugin: NSObject, FlutterPlugin, VNDocumentCa
                            let path = try self.saveSingleImage(image: image)
                            DispatchQueue.main.async {
                                self.resultChannel?([path])
+                               self.resultChannel = nil
                            }
                        } catch {
                            DispatchQueue.main.async {
-                               self.resultChannel?(FlutterError(code: "SCAN_SAVE_ERROR", message: "Failed to save captured image", details: error.localizedDescription))
+                               self.resultChannel?(FlutterError(code: "SCAN_SAVE_ERROR", message: "Failed to save captured image", details: nil))
+                               self.resultChannel = nil
                            }
                        }
                    }
                }
                controller.onCancel = { [weak self] in
                    self?.resultChannel?(nil)
+                   self?.resultChannel = nil
                }
                controller.onError = { [weak self] error in
-                   self?.resultChannel?(FlutterError(code: "SCAN_ERROR", message: "Failed to scan documents", details: error.localizedDescription))
+                   self?.resultChannel?(FlutterError(code: "SCAN_ERROR", message: "Failed to scan documents", details: nil))
+                   self?.resultChannel = nil
                }
                presentedVC?.present(controller, animated: true)
            } else {
@@ -95,6 +112,10 @@ public class SwiftFlutterDocScannerPlugin: NSObject, FlutterPlugin, VNDocumentCa
            }
        } else if call.method == "getScannedDocumentAsPdf" {
            let presentedVC: UIViewController? = UIApplication.shared.keyWindow?.rootViewController
+           if presentedVC == nil {
+               result(FlutterError(code: "NO_PRESENTER", message: "no view controller to present the scanner", details: nil))
+               return
+           }
            self.resultChannel = result
            self.currentMethod = call.method
            self.presentingController = VNDocumentCameraViewController()
@@ -147,10 +168,22 @@ public class SwiftFlutterDocScannerPlugin: NSObject, FlutterPlugin, VNDocumentCa
        for i in 0 ..< scan.pageCount {
            let page = scan.imageOfPage(at: i)
            let url = tempDirPath.appendingPathComponent(formattedDate + "-\(i).png")
-           try? page.pngData()?.write(to: url)
-           filenames.append(url.path)
+           guard let data = page.pngData() else {
+               resultChannel?(FlutterError(code: "SCAN_SAVE_ERROR", message: "failed to write a scanned page", details: nil))
+               resultChannel = nil
+               return
+           }
+           do {
+               try data.write(to: url)
+               filenames.append(url.path)
+           } catch {
+               resultChannel?(FlutterError(code: "SCAN_SAVE_ERROR", message: "failed to write a scanned page", details: nil))
+               resultChannel = nil
+               return
+           }
        }
        resultChannel?(filenames)
+       resultChannel = nil
    }
 
    private func saveScannedPdf(scan: VNDocumentCameraScan) {
@@ -172,18 +205,22 @@ public class SwiftFlutterDocScannerPlugin: NSObject, FlutterPlugin, VNDocumentCa
        do {
            try pdfDocument.write(to: pdfFilePath)
            resultChannel?(pdfFilePath.path)
+           resultChannel = nil
        } catch {
-           resultChannel?(FlutterError(code: "PDF_CREATION_ERROR", message: "Failed to create PDF", details: error.localizedDescription))
+           resultChannel?(FlutterError(code: "PDF_CREATION_ERROR", message: "Failed to create PDF", details: nil))
+           resultChannel = nil
        }
    }
 
    public func documentCameraViewControllerDidCancel(_ controller: VNDocumentCameraViewController) {
        resultChannel?(nil)
+       resultChannel = nil
        presentingController?.dismiss(animated: true)
    }
 
    public func documentCameraViewController(_ controller: VNDocumentCameraViewController, didFailWithError error: Error) {
-       resultChannel?(FlutterError(code: "SCAN_ERROR", message: "Failed to scan documents", details: error.localizedDescription))
+       resultChannel?(FlutterError(code: "SCAN_ERROR", message: "Failed to scan documents", details: nil))
+       resultChannel = nil
        presentingController?.dismiss(animated: true)
    }
 }
