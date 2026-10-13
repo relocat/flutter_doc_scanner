@@ -112,7 +112,8 @@ class FlutterDocScanner {
   /// [DocScanException.codeCopyFailed] (`COPY_FAILED`) on any failure (null input
   /// stream, IO error, or a lapsed URI permission grant); the error message is
   /// static and never contains the URI or path. On iOS this method is not
-  /// implemented and throws [DocScanException] with a `notImplemented` code.
+  /// implemented: the call throws a `MissingPluginException` (not a
+  /// [DocScanException]).
   Future<bool> copyPageToFile({
     required String uri,
     required String destPath,
