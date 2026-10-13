@@ -1,3 +1,10 @@
+## Unreleased (Relocat fork, based on 0.0.21)
+- Android and iOS only: removed the Linux, macOS, Windows and Web plugin code and example runners, and the `flutter_web_plugins` dependency.
+- Added `copyPageToFile({required String uri, required String destPath})` to copy an ML Kit `content://` page into an app-owned file (Android). Failures return the static code `COPY_FAILED`.
+- iOS: camera-permission preflight returns `PERMISSION_DENIED` without opening the scanner when access is denied or restricted.
+- iOS hardening: no `localizedDescription` in channel errors, a reply for every call, a single-scan guard, and no path returned when a page fails to save.
+- Added AUDIT.md; no version bump.
+
 ## 0.0.21
 - Added full Swift Package Manager (SwiftPM) support for both iOS and macOS, while maintaining full CocoaPods compatibility.
 - Restructured native plugin sources to the new SwiftPM layout and removed the legacy Objective-C shim, with successful verification on both integration methods.

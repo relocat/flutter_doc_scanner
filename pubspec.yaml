@@ -2,6 +2,9 @@ name: flutter_doc_scanner
 description: "A Flutter plugin for document scanning on Android and iOS using ML Kit Document Scanner API and VisionKit."
 version: 0.0.21
 homepage: https://github.com/shirsh94/flutter_doc_scanner/
+repository: https://github.com/relocat/flutter_doc_scanner
+issue_tracker: https://github.com/relocat/flutter_doc_scanner/issues
+publish_to: none
 
 environment:
   sdk: '>=2.18.0 <4.0.0'

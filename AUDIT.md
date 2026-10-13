@@ -181,9 +181,10 @@ should not assume EXIF=1/absent from the plugin.
 
 ---
 
-## 5. Changes this fork makes vs upstream (`b6b22fe`)
+## 5. Changes in the initial hardening commit vs upstream (`b6b22fe`)
 
-All changes are in this single hardening commit; the fork otherwise matches upstream `b6b22fe`.
+This section lists the changes made by the initial hardening commit (`16208d0`). Amendments 1 and 2
+below record the later changes.
 
 1. **Removed desktop/web plugin platform stubs** (dead code, smaller attack surface; keep
    android/ios only): deleted top-level `linux/`, `macos/`, `windows/` directories and
@@ -200,7 +201,9 @@ All changes are in this single hardening commit; the fork otherwise matches upst
    unchanged.
 6. **Added `AUDIT.md`** (this file).
 
-No changes were made to Dart public API, Android Kotlin, iOS Swift, or the ML Kit dependency version.
+The initial hardening commit made no changes to the Dart public API, Android Kotlin, iOS Swift, or
+the ML Kit dependency version. Amendment 1 later added `copyPageToFile` (Dart API and Android
+Kotlin) and the iOS camera-permission preflight (Swift); Amendment 2 changed iOS Swift only.
 
 **Left in place intentionally:** `lib/flutter_doc_scanner_platform_check.dart` (`PlatformInfo`) is an
 unused Dart-only helper that returns platform-name strings (including desktop names). It is not a
@@ -217,7 +220,7 @@ it is inert dead code.
   unavailable on the `getScanDocumentsUri`/PDF paths (where gallery import is hardcoded enabled). If
   the app needs "multi-page, camera-only (no gallery import), image-URI" capture, that combination
   is **not expressible** with the current public API and would require adding a dedicated
-  `isGalleryImport`/`galleryImportAllowed` parameter — i.e., unbudgeted fork API work. Not added
+  `isGalleryImport`/`galleryImportAllowed` parameter — a further fork API addition. Not added
   here; surfaced for the maintainers to decide.
 - **NOTE (iOS output location):** results land in `Documents/`, a backed-up / potentially
   Files-app-visible location rather than a private temp/`Caches` dir (§2). In-sandbox, so 1.3
@@ -322,9 +325,9 @@ New `DocScanException` codes (`lib/flutter_doc_scanner_exception.dart`): `codePe
 
 - `dart analyze lib test` → **No issues found.** `flutter test` → **6/6 passing** (adds
   `copyPageToFile` delegation + method-channel success/`COPY_FAILED`-mapping tests).
-- Kotlin and Swift were syntax-reviewed line-by-line only — **no Android/iOS toolchain is available
-  in this environment**, so they were not compiled. This is a residual to close on a machine with the
-  native SDKs.
+- Kotlin and Swift were reviewed statically, line by line; this audit did not compile them. The
+  Android plugin code, including `copyPageToFile`, is compiled and exercised by the Relocat app's
+  Android release builds. The iOS Swift has been reviewed statically only.
 
 ---
 
@@ -408,5 +411,4 @@ restyle was performed — only the four fixes above.
   active Swift (the sole remaining reference is `NSLocalizedDescriptionKey`, an error-construction key
   in `saveSingleImage`, not a channel leak), all `details:` arguments are `nil`, and every stored
   `resultChannel?(...)` reply is followed by `resultChannel = nil`.
-- **No Android/iOS toolchain is available in this environment**, so the Swift was **not compiled**. A
-  device compile + run is still required to close this out, as with Amendment 1.
+- The Swift change was reviewed statically only; this audit did not compile or run it.

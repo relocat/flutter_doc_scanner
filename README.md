@@ -1,6 +1,43 @@
+> [!NOTE]
+> **This is Relocat's fork of [flutter_doc_scanner](https://github.com/shirsh94/flutter_doc_scanner)**
+> by Shirsh Shukla and contributors ([pub.dev](https://pub.dev/packages/flutter_doc_scanner)).
+> It is based on upstream `main` at v0.0.21 (`b6b22fe2e4d861c0df2ab182b417cccbe6ff7600`).
+>
+> **Why it exists.** The [Relocat](https://relocat.org) app scans paper documents straight into an
+> encrypted vault. The scanner handles page images before they are encrypted, so we reduced
+> the plugin's surface, reviewed it (see [AUDIT.md](AUDIT.md)) and added the two hooks we needed.
+>
+> **What this fork changes:**
+> - Android and iOS only. Removed the Linux, macOS, Windows and Web plugin code and example
+>   runners, and the `flutter_web_plugins` dependency.
+> - New `copyPageToFile({required String uri, required String destPath})` → `Future<bool>`.
+>   On Android it copies an ML Kit `content://` page into a file path the app owns. Failures
+>   return the static code `COPY_FAILED` and echo no path.
+> - iOS camera-permission preflight. When access is denied or restricted, the plugin returns
+>   `PERMISSION_DENIED` without opening the scanner.
+> - iOS hardening:
+>   - errors sent over the method channel no longer include `localizedDescription`, which can
+>     contain file paths;
+>   - every call gets a reply, even when no view controller can present the scanner;
+>   - one scan runs at a time;
+>   - no path is returned when a page fails to save.
+>
+> **Licence.** MIT, unchanged from upstream (see [LICENSE](LICENSE)). Our changes are released under
+> the same licence.
+>
+> Relocat is **not affiliated with or endorsed by** the flutter_doc_scanner maintainers.
+>
+> **Use the upstream package unless you need these changes.** This fork is not published to pub.dev;
+> depend on it by git URL pinned to a commit.
+>
+> **Issues.** Problems with the changes above belong
+> [here](https://github.com/relocat/flutter_doc_scanner/issues). Everything else belongs
+> [upstream](https://github.com/shirsh94/flutter_doc_scanner/issues). Report security issues
+> privately to office@relocat.org.
+
 # flutter_doc_scanner
 
-A Flutter plugin for document scanning on Android, iOS, and Web using ML Kit Document Scanner API and VisionKit.
+A Flutter plugin for document scanning on Android and iOS using ML Kit Document Scanner API and VisionKit.
 
 [![pub package](https://img.shields.io/pub/v/flutter_doc_scanner.svg)](https://pub.dev/packages/flutter_doc_scanner)
 
@@ -69,7 +106,7 @@ Use the following function for document scanning on Android and iOS:
 
 
 ## Project Setup
-Follow the steps below to set up your Flutter project on Android, iOS, and Web.
+Follow the steps below to set up your Flutter project on Android and iOS.
 
 ### Android
 
