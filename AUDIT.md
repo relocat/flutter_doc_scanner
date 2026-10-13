@@ -221,7 +221,7 @@ it is inert dead code.
   the app needs "multi-page, camera-only (no gallery import), image-URI" capture, that combination
   is **not expressible** with the current public API and would require adding a dedicated
   `isGalleryImport`/`galleryImportAllowed` parameter — a further fork API addition. Not added
-  here; surfaced for the maintainers to decide.
+  here; left open for a future change.
 - **NOTE (iOS output location):** results land in `Documents/`, a backed-up / potentially
   Files-app-visible location rather than a private temp/`Caches` dir (§2). In-sandbox, so 1.3
   passes, but the app must evacuate and delete plaintext scans promptly, and a future fork change to
